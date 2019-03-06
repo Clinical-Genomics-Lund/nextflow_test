@@ -14,10 +14,10 @@ if(params.fasta ){
 }	     
 
 Channel
-  .fromPath("${params.bed}")
-  .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
-  .splitText( by: 1000, file: 'bedpart.bed' )
-  .into { beds_mutect; beds_freebayes }
+    .fromPath("${params.bed}")
+    .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
+    .splitText( by: 1000, file: 'bedpart.bed' )
+    .into { beds_mutect; beds_freebayes; beds_tnscope }
 
 
 
@@ -41,7 +41,7 @@ process markdup {
   set val(name), file(sorted_bam) from bwa_bam
 
   output:
-  set file("markdup.bam"), file("markdup.bam.bai") into bam_freebayes, bam_mutect
+  set file("markdup.bam"), file("markdup.bam.bai") into bam_freebayes, bam_mutect, bam_tnscope
 
   """
     sambamba markdup --tmpdir /data/tmp -t 6 $sorted_bam markdup.bam
@@ -71,10 +71,37 @@ process mutect {
 
   """
     gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $sorted_bam -L $bed -O mutect_${bed}.vcf
-
   """
 }
 
+process sentieon_preprocess_bam {
+  cpus 8
+
+  input:
+	set file(sorted_bam), file(sorted_bam_bai) from bam_tnscope
+
+  output:
+	set file("realn.bam"), file("realn.bam.bai"), file("recal.table") into processed_bam_tnscope
+
+  """
+    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i $sorted_bam --algo Realigner realn.bam
+    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i realn.bam --algo QualCal recal.table
+  """
+}
+
+
+process sentieon_tnscope {
+  input:
+    set file(bam), file(bai), file(recal_table) from processed_bam_tnscope
+    file bed from beds_tnscope
+
+  output:
+  set val("tnscope"), file("tnscope_${bed}.vcf") into vcf_parts_tnscope
+
+  """
+    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i $bam -q $recal_table --algo TNscope --tumor_sample ${name} tnscope_${bed}.vcf
+  """  
+}
 
 process merge_freebayes_vcfs {
   input:
@@ -89,7 +116,7 @@ process merge_freebayes_vcfs {
 }
 
 process merge_mutect_vcfs {
-  tag "mutect"
+  tag "mutect merge"
   input:
   set val(vc), file(vcfs) from vcf_parts_mutect.groupTuple()
 
@@ -101,17 +128,31 @@ process merge_mutect_vcfs {
   """
 }
 
+process merge_tnscope_vcfs {
+  tag "tnscope merge"
+  input:
+  set val(vc), file(vcfs) from vcf_parts_tnscope.groupTuple()
+
+  output:
+  file "${vc}.vcf.gz" into merged_vcf_tnscope
+
+  """
+    vcf-concat $vcfs | vcf-sort | gzip -c > ${vc}.vcf.gz
+  """
+}
+
 
 process aggregate_vcfs {
   input:
   file(vcf1) from merged_vcf_mutect
   file(vcf2) from merged_vcf_freebayes
+  file(vcf3) from merged_vcf_tnscope
 
   output:
     file 'all.vcf' into result
 
   """
-    cat $vcf1 $vcf2 > 'all.vcf'
+    cat $vcf1 $vcf2 $vcf3 > 'all.vcf'
   """
   
 }
