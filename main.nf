@@ -54,7 +54,7 @@ process freebayes {
   file bed from beds_freebayes
 
   output:
-  set val("freebayes"), file("freebayes_${bed}.vcf") into vcf_parts_freebayes
+  set val("freebayes"), file("freebayes_${bed}.vcf") into vcfparts_freebayes
 
   """
     freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $sorted_bam > freebayes_${bed}.vcf
@@ -67,7 +67,7 @@ process mutect {
   file bed from beds_mutect
 
   output:
-  set val("mutect"), file("mutect_${bed}.vcf") into vcf_parts_mutect
+  set val("mutect"), file("mutect_${bed}.vcf") into vcfparts_mutect
 
   """
     gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $sorted_bam -L $bed -O mutect_${bed}.vcf
@@ -96,64 +96,43 @@ process sentieon_tnscope {
     file bed from beds_tnscope
 
   output:
-  set val("tnscope"), file("tnscope_${bed}.vcf") into vcf_parts_tnscope
+  set val("tnscope"), file("tnscope_${bed}.vcf") into vcfparts_tnscope
 
   """
     /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i $bam -q $recal_table --algo TNscope --tumor_sample ${name} tnscope_${bed}.vcf
   """  
 }
 
-process merge_freebayes_vcfs {
-  input:
-  set val(vc), file(vcfs) from vcf_parts_freebayes.groupTuple()
 
-  output:
-  file "${vc}.vcf.gz" into merged_vcf_freebayes
+// Prepare vcf parts for concatenation
+vcfparts_freebayes = vcfparts_freebayes.groupTuple()
+vcfparts_tnscope   = vcfparts_tnscope.groupTuple()
+vcfparts_mutect    = vcfparts_mutect.groupTuple()
+vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope)
 
-  """
+process concatenate_vcfs {
+    input:
+	set vc, file(vcfs) from vcfs_to_concat
+
+    output:
+	set val("sample"), file("*.vcf.gz") into concatenated_vcfs
+
+    """
     vcf-concat $vcfs | vcf-sort | gzip -c > ${vc}.vcf.gz
-  """
+    """
 }
 
-process merge_mutect_vcfs {
-  tag "mutect merge"
-  input:
-  set val(vc), file(vcfs) from vcf_parts_mutect.groupTuple()
-
-  output:
-  file "${vc}.vcf.gz" into merged_vcf_mutect
-
-  """
-    vcf-concat $vcfs | vcf-sort | gzip -c > ${vc}.vcf.gz
-  """
-}
-
-process merge_tnscope_vcfs {
-  tag "tnscope merge"
-  input:
-  set val(vc), file(vcfs) from vcf_parts_tnscope.groupTuple()
-
-  output:
-  file "${vc}.vcf.gz" into merged_vcf_tnscope
-
-  """
-    vcf-concat $vcfs | vcf-sort | gzip -c > ${vc}.vcf.gz
-  """
-}
 
 
 process aggregate_vcfs {
-  input:
-  file(vcf1) from merged_vcf_mutect
-  file(vcf2) from merged_vcf_freebayes
-  file(vcf3) from merged_vcf_tnscope
+    input:
+	set sample, file(vcfs) from concatenated_vcfs.groupTuple()
+    
+    output:
+	file 'all.vcf.gz' into result
 
-  output:
-    file 'all.vcf' into result
-
-  """
-    cat $vcf1 $vcf2 $vcf3 > 'all.vcf'
-  """
+    """
+    cat $vcfs > all.vcf.gz
+    """
   
 }
-
