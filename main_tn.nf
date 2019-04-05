@@ -1,8 +1,6 @@
 #!/usr/bin/env nextflow
 
 genome_file = file(params.fasta)
-//fqs_T  = file(params.fastq_T)
-//fqs_N  = file(params.fastq_N)
 regions_bed = file(params.bed)
 name        = params.name
 threads     = 10
@@ -62,52 +60,62 @@ bams.choice(bamT, bamN) {it[0] == "T" ? 0 : 1}
 
 
 process freebayes {
-  input:
-    set val(typeT), file(bamT), file(baiT) from bamT_freebayes
-    set val(typeN), file(bamN), file(baiN) from bamN_freebayes
-    each file(bed) from beds_freebayes
+    input:
+	set val(typeT), file(bamT), file(baiT) from bamT_freebayes
+        set val(typeN), file(bamN), file(baiN) from bamN_freebayes
+        each file(bed) from beds_freebayes
 
-  output:
-  set val("freebayes"), file("freebayes_${bed}.vcf") into vcfparts_freebayes
+    output:
+	set val("freebayes"), file("freebayes_${bed}.vcf") into vcfparts_freebayes
 
-  """
+    when:
+	params.freebayes
+    
+    """
     freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf
-  """
+    """
 }
 
 
 
 process mutect {
-  input:
-    set val(typeT), file(bamT), file(baiT) from bamT_mutect
-    set val(typeN), file(bamN), file(baiN) from bamN_mutect
-    each file(bed) from beds_mutect
+    input:
+	set val(typeT), file(bamT), file(baiT) from bamT_mutect
+        set val(typeN), file(bamN), file(baiN) from bamN_mutect
+        each file(bed) from beds_mutect
 
-  output:
-  set val("mutect"), file("mutect_${bed}.vcf") into vcfparts_mutect
+    output:
+	set val("mutect"), file("mutect_${bed}.vcf") into vcfparts_mutect
 
-  """
+    
+    when:
+	params.mutect
+    
+    """
     gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $bamT -I $bamN -tumor ${name}_T -normal ${name}_N -L $bed -O mutect_${bed}.vcf
-  """
+    """
 }
 
 
 
 process sentieon_preprocess_bam {
-  cpus 8
+    cpus 8
 
-  input:
-    set val(typeT), file(bamT), file(baiT) from bamT_tnscope
-    set val(typeN), file(bamN), file(baiN) from bamN_tnscope
+    input:
+	set val(typeT), file(bamT), file(baiT) from bamT_tnscope
+        set val(typeN), file(bamN), file(baiN) from bamN_tnscope
 
-  output:
+    output:
 	set file(bamT), file(baiT), file("T_recal.table") into processed_bamT_tnscope
 	set file(bamN), file(baiN), file("N_recal.table") into processed_bamN_tnscope
 
-  """
+    when:
+	params.tnscope
+    
+    """
     /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i ${bamT} --algo QualCal T_recal.table
     /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i ${bamN} --algo QualCal N_recal.table
-  """
+    """
 }
 
 process sentieon_tnscope {
