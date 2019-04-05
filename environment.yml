@@ -24,3 +24,5 @@ dependencies:
     - bioconda::bedtools=2.27.1
     - bioconda::vcftools=0.1.16
     - bioconda::perl-vcftools-vcf=0.1.16
+    - bioconda::vt=2015.11.10
+    - bioconda::gatk=3.8

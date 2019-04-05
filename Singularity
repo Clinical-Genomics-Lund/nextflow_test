@@ -15,9 +15,8 @@ From:nfcore/base
         environment.yml /
         /data/bnf/scripts/postaln_qc.pl /usr/local/bin
 	/data/bnf/sw/sentieon/sentieon-genomics-201808.01 /opt
-
+        data/GenomeAnalysisTK-3.8.tar.bz2 /opt
 
 %post
 	/opt/conda/bin/conda env create -f /environment.yml
 	/opt/conda/bin/conda clean -a
-

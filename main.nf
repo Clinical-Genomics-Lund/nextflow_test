@@ -118,15 +118,18 @@ process concatenate_vcfs {
 	set val("sample"), file("*.vcf.gz") into concatenated_vcfs
 
     """
-    vcf-concat $vcfs | vcf-sort | gzip -c > ${vc}.vcf.gz
+    vcf-concat $vcfs | vcf-sort -c | gzip -c > ${vc}.concat.vcf.gz
+    vt decompose ${vc}.concat.vcf.gz -o ${vc}.decomposed.vcf.gz
+    vt normalize ${vc}.decomposed.vcf.gz -r $genome_file | vt uniq - -o ${vc}.vcf.gz
     """
 }
 
 
 
+
 process aggregate_vcfs {
     input:
-	set sample, file(vcfs) from concatenated_vcfs.groupTuple()
+        set sample, file(vcfs) from concatenated_vcfs.toList()
     
     output:
 	file 'all.vcf.gz' into result
