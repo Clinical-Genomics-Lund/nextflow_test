@@ -20,3 +20,4 @@ From:nfcore/base
 %post
 	/opt/conda/bin/conda env create -f /environment.yml
 	/opt/conda/bin/conda clean -a
+	gatk3-register /opt/sentieon-genomics-201808.01

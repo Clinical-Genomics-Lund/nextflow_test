@@ -5,8 +5,19 @@ regions_bed = file(params.bed)
 name        = params.name
 threads     = 10
 
-fastq = Channel.from( [['T', file(params.fastq_T_R1), file(params.fastq_T_R2)],
-		       ['N', file(params.fastq_N_R1), file(params.fastq_N_R2)]] )
+
+// Check if paired or unpaired analysis
+mode = "paired"
+fastq = Channel.create()
+if(params.fastq_N_R1 && params.fastq_N_R2) {	
+    fastq = [['T', file(params.fastq_T_R1), file(params.fastq_T_R2)],
+	     ['N', file(params.fastq_N_R1), file(params.fastq_N_R2)]]
+}
+else {
+    fastq = [['T', file(params.fastq_T_R1), file(params.fastq_T_R2)]]
+    mode = "unpaired"
+}    
+
 
 if(params.fasta ){
     bwaId = Channel
@@ -14,6 +25,7 @@ if(params.fasta ){
             .ifEmpty { exit 1, "BWA index not found: ${params.fasta}.bwt" }
 }	     
 
+// Split bed file in to smaller parts to be used for parallel variant calling
 Channel
     .fromPath("${params.bed}")
     .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
@@ -23,7 +35,6 @@ Channel
 
 
 process bwa_align {
-
   input: 
 	set val(type), file(r1), file(r2) from fastq
 
@@ -36,9 +47,10 @@ process bwa_align {
   """
 }
 
+
 process markdup {
   input:
-  set val(type), file(sorted_bam) from bwa_bam
+	set val(type), file(sorted_bam) from bwa_bam
 
   output:
 	set val(type), file("${type}.markdup.bam"), file("${type}.markdup.bam.bai") into bams
@@ -48,6 +60,7 @@ process markdup {
   """
 }
 
+
 // Split tumor and normal bams into different channels
 bamT = Channel.create()
 bamN = Channel.create()
@@ -55,8 +68,12 @@ bams.choice(bamT, bamN) {it[0] == "T" ? 0 : 1}
 
 // Send them to the different variant callers
 (bamT_freebayes, bamT_mutect, bamT_tnscope) = bamT.into(3)
-(bamN_freebayes, bamN_mutect, bamN_tnscope) = bamN.into(3)
-
+bamN_freebayes = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
+bamN_mutect    = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
+bamN_tnscope   = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
+if( mode == "paired" ) {
+    (bamN_freebayes, bamN_mutect, bamN_tnscope) = bamN.into(3)
+}
 
 
 process freebayes {
@@ -71,11 +88,18 @@ process freebayes {
     when:
 	params.freebayes
     
-    """
-    freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf
-    """
+    script:
+    if( mode == "paired" ) {
+   	"""
+        freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf
+        """
+    }
+    else if( mode == "unpaired" ) {
+   	"""
+        freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT > freebayes_${bed}.vcf
+        """
+    }
 }
-
 
 
 process mutect {
@@ -90,10 +114,18 @@ process mutect {
     
     when:
 	params.mutect
-    
-    """
-    gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $bamT -I $bamN -tumor ${name}_T -normal ${name}_N -L $bed -O mutect_${bed}.vcf
-    """
+
+    script:
+    if( mode == "paired" ) {
+	"""
+	gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $bamT -I $bamN -tumor ${name}_T -normal ${name}_N -L $bed -O mutect_${bed}.vcf
+        """
+    }
+    else if( mode == "unpaired" ) {
+	"""
+	gatk --java-options "-Xmx2g" Mutect2 -R $genome_file -I $bamT -tumor ${name}_T -L $bed -O mutect_${bed}.vcf
+        """
+    }
 }
 
 

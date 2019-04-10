@@ -5,3 +5,4 @@ work/
 *.sif
 *.png
 data/
+test_run_*
