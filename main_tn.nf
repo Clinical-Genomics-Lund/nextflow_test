@@ -111,12 +111,12 @@ process vardict {
     script:
     if( mode == "paired" ) {
    	"""
-	vardict -G $genome_file -f 0.03 -N ${name}_T -b "$bamT|$bamN" -c 1 -S 2 -E 3 -g 4 $bed | testsomatic.R | var2vcf_paired.pl -N "${name}_T|${name}_N" -f 0.03
+	vardict -G $genome_file -f 0.03 -N ${name}_T -b "$bamT|$bamN" -c 1 -S 2 -E 3 -g 4 $bed | testsomatic.R | var2vcf_paired.pl -N "${name}_T|${name}_N" -f 0.03 > vardict_${bed}.vcf
         """
     }
     else if( mode == "unpaired" ) {
    	"""
-	vardict -G $genome_file -f 0.03 -N ${name}_T -b $bamT -c 1 -S 2 -E 3 -g 4 $bed | teststrandbias.R | var2vcf_valid.pl -N ${name}_T -E -f 0.03
+	vardict -G $genome_file -f 0.03 -N ${name}_T -b $bamT -c 1 -S 2 -E 3 -g 4 $bed | teststrandbias.R | var2vcf_valid.pl -N ${name}_T -E -f 0.03 > vardict_${bed}.vcf
         """
     }
 }
