@@ -28,7 +28,7 @@ if(params.fasta ){
 Channel
     .fromPath("${params.bed}")
     .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
-    .splitText( by: 100, file: 'bedpart.bed' )
+    .splitText( by: 250, file: 'bedpart.bed' )
     .into { beds_mutect; beds_freebayes; beds_tnscope; beds_vardict }
 
 // Pindel bed file
@@ -236,18 +236,18 @@ vcfparts_vardict   = vcfparts_vardict.groupTuple()
 vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope, vcfparts_vardict)
 
 process concatenate_vcfs {
-    publishDir '/data/bnf/proj/nextflow_test/vcf'
+    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
     
     input:
 	set vc, file(vcfs) from vcfs_to_concat
 
     output:
-	set val("sample"), file("${vc}.vcf.gz") into concatenated_vcfs
+	set val("sample"), file("${name}_{vc}.vcf.gz") into concatenated_vcfs
 
     """
     vcf-concat $vcfs | vcf-sort -c | gzip -c > ${vc}.concat.vcf.gz
     vt decompose ${vc}.concat.vcf.gz -o ${vc}.decomposed.vcf.gz
-    vt normalize ${vc}.decomposed.vcf.gz -r $genome_file | vt uniq - -o ${vc}.vcf.gz
+    vt normalize ${vc}.decomposed.vcf.gz -r $genome_file | vt uniq - -o ${name}_${vc}.vcf.gz
     """
 }
 
