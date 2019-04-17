@@ -52,10 +52,18 @@ process bwa_align {
     output:
 	set val(type), file("${type}_bwa.sort.bam") into bwa_bam
 
-    """
-    bwa mem -R '@RG\\tID:${name}_${type}\\tSM:${name}_${type}\\tPL:illumina' -M -t ${task.cpus} $genome_file $r1 $r2 | samtools view -Sb - | samtools sort -o ${type}_bwa.sort.bam -
-    samtools index ${type}_bwa.sort.bam
-    """
+    script:
+    if( params.sentieon_bwa ) {
+	"""
+        /opt/sentieon-genomics-201808.01/bin/sentieon bwa mem -M -R '@RG\\tID:${name}_${type}\\tSM:${name}_${type}\\tPL:illumina' -t ${task.cpus} $genome_file $r1 $r2 | /opt/sentieon-genomics-201808.01/bin/sentieon util sort -r $genome_file -o ${type}_bwa.sort.bam -t ${task.cpus} --sam2bam -i -
+        """
+    }
+    else {
+	"""
+        bwa mem -R '@RG\\tID:${name}_${type}\\tSM:${name}_${type}\\tPL:illumina' -M -t ${task.cpus} $genome_file $r1 $r2 | samtools view -Sb - | samtools sort -o ${type}_bwa.sort.bam -
+        samtools index ${type}_bwa.sort.bam
+        """
+    }
 }
 
 
@@ -228,6 +236,8 @@ vcfparts_vardict   = vcfparts_vardict.groupTuple()
 vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope, vcfparts_vardict)
 
 process concatenate_vcfs {
+    publishDir '/data/bnf/proj/nextflow_test/vcf'
+    
     input:
 	set vc, file(vcfs) from vcfs_to_concat
 

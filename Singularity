@@ -7,7 +7,7 @@ From:nfcore/base
 	VERSION 0.0.1
 
 %environment
-	PATH=/opt/conda/envs/CMD-twist/bin:$PATH
+	PATH=/opt/conda/envs/CMD-twist/bin:/opt/sentieon-genomics-201808.01/bin/:$PATH
 	PICARD_HOME=/opt/conda/envs/CMD-twist/share/picard-2.18.26-0/
 
 
@@ -20,4 +20,4 @@ From:nfcore/base
 %post
 	/opt/conda/bin/conda env create -f /environment.yml
 	/opt/conda/bin/conda clean -a
-	gatk3-register /opt/sentieon-genomics-201808.01
+	#gatk3-register /opt/sentieon-genomics-201808.01
