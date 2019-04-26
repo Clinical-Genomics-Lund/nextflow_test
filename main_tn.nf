@@ -55,7 +55,7 @@ process bwa_align {
     script:
     if( params.sentieon_bwa ) {
 	"""
-        /opt/sentieon-genomics-201808.01/bin/sentieon bwa mem -M -R '@RG\\tID:${name}_${type}\\tSM:${name}_${type}\\tPL:illumina' -t ${task.cpus} $genome_file $r1 $r2 | /opt/sentieon-genomics-201808.01/bin/sentieon util sort -r $genome_file -o ${type}_bwa.sort.bam -t ${task.cpus} --sam2bam -i -
+        sentieon bwa mem -M -R '@RG\\tID:${name}_${type}\\tSM:${name}_${type}\\tPL:illumina' -t ${task.cpus} $genome_file $r1 $r2 | sentieon util sort -r $genome_file -o ${type}_bwa.sort.bam -t ${task.cpus} --sam2bam -i -
         """
     }
     else {
@@ -190,7 +190,7 @@ process mutect {
 
 
 process sentieon_preprocess_bam {
-    cpus 8
+    cpus 10
 
     input:
 	set val(typeT), file(bamT), file(baiT) from bamT_tnscope
@@ -202,11 +202,22 @@ process sentieon_preprocess_bam {
 
     when:
 	params.tnscope
-    
-    """
-    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i ${bamT} --algo QualCal T_recal.table
-    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i ${bamN} --algo QualCal N_recal.table
-    """
+
+    script:
+    if( mode == "paired" ) {
+	"""
+        sentieon driver -t ${task.cpus} -r $genome_file -i ${bamT} --algo QualCal T_recal.table
+        sentieon driver -t ${task.cpus} -r $genome_file -i ${bamN} --algo QualCal N_recal.table
+        """
+    }
+    else if( mode == "unpaired" ) {
+	"""
+        sentieon driver -t ${task.cpus} -r $genome_file -i ${bamT} --algo QualCal T_recal.table
+        touch ${bamN} 
+        touch ${baiN} 
+        touch N_recal.table
+        """
+    }
 }
 
 process sentieon_tnscope {
@@ -220,11 +231,19 @@ process sentieon_tnscope {
     output:
 	set val("tnscope"), file("tnscope_${bed}.vcf") into vcfparts_tnscope
 
-  """
-    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file -i $bamT -q $recal_tableT -i $bamN -q $recal_tableN --interval $bed --algo TNscope --tumor_sample ${name}_T --normal_sample ${name}_N --clip_by_minbq 1 --max_error_per_read 3 --min_init_tumor_lod 2.0 --min_base_qual 10 --min_base_qual_asm 10 --min_tumor_allele_frac 0.00005 tnscope_${bed}.tmp.vcf
-    /opt/sentieon-genomics-201808.01/bin/sentieon driver -t ${task.cpus} -r $genome_file --algo TNModelApply --model /data/bnf/ref/sentieon/Sentieon_GiAB_HighAF_LowFP_201711.05.model -v tnscope_${bed}.tmp.vcf tnscope_${bed}.tmp2.vcf
-    bcftools filter -s "ML_FAIL" -i "INFO/ML_PROB > 0.81" tnscope_${bed}.tmp2.vcf -m x -o tnscope_${bed}.vcf
-  """  
+    script:
+    if( mode == "paired" ) {
+	"""
+        sentieon driver -t ${task.cpus} -r $genome_file -i $bamT -q $recal_tableT -i $bamN -q $recal_tableN --interval $bed --algo TNscope --tumor_sample ${name}_T --normal_sample ${name}_N --clip_by_minbq 1 --max_error_per_read 3 --min_init_tumor_lod 2.0 --min_base_qual 10 --min_base_qual_asm 10 --min_tumor_allele_frac 0.00005 tnscope_${bed}.tmp.vcf
+        sentieon driver -t ${task.cpus} -r $genome_file --algo TNModelApply --model /data/bnf/ref/sentieon/Sentieon_GiAB_HighAF_LowFP_201711.05.model -v tnscope_${bed}.tmp.vcf tnscope_${bed}.tmp2.vcf
+        bcftools filter -s "ML_FAIL" -i "INFO/ML_PROB > 0.81" tnscope_${bed}.tmp2.vcf -m x -o tnscope_${bed}.vcf
+        """
+    }
+    else {
+	"""
+        sentieon driver -t ${task.cpus} -r $genome_file -i $bamT -q $recal_tableT --interval $bed --algo TNscope --tumor_sample ${name}_T --clip_by_minbq 1 --max_error_per_read 3 --min_init_tumor_lod 2.0 --min_base_qual 10 --min_base_qual_asm 10 --min_tumor_allele_frac 0.00005 tnscope_${bed}.vcf
+        """ 
+    }
 }
 
 
@@ -242,7 +261,7 @@ process concatenate_vcfs {
 	set vc, file(vcfs) from vcfs_to_concat
 
     output:
-	set val("sample"), file("${name}_{vc}.vcf.gz") into concatenated_vcfs
+	set val("sample"), file("${name}_${vc}.vcf.gz") into concatenated_vcfs
 
     """
     vcf-concat $vcfs | vcf-sort -c | gzip -c > ${vc}.concat.vcf.gz
