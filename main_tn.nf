@@ -4,6 +4,12 @@ genome_file = file(params.fasta)
 regions_bed = file(params.bed)
 name        = params.name
 
+CADD      = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
+VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
+VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
+GNOMAD    = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
+
+
 
 // Check if paired or unpaired analysis
 mode = "paired"
@@ -28,7 +34,7 @@ if(params.fasta ){
 Channel
     .fromPath("${params.bed}")
     .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
-    .splitText( by: 250, file: 'bedpart.bed' )
+    .splitText( by: 500, file: 'bedpart.bed' )
     .into { beds_mutect; beds_freebayes; beds_tnscope; beds_vardict }
 
 // Pindel bed file
@@ -255,8 +261,6 @@ vcfparts_vardict   = vcfparts_vardict.groupTuple()
 vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope, vcfparts_vardict)
 
 process concatenate_vcfs {
-    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
-    
     input:
 	set vc, file(vcfs) from vcfs_to_concat
 
@@ -277,10 +281,36 @@ process aggregate_vcfs {
         set sample, file(vcfs) from concatenated_vcfs.groupTuple()
     
     output:
-	file 'all.vcf.gz' into result
+	file("${name}.agg.vcf") into agg_vcf
 
     """
-    cat $vcfs > all.vcf.gz
+    export PERL5LIB=/data/bnf/scripts/modules
+    aggregate_vcf.pl --vcf ${vcfs.join(",")} |vcf-sort -c > ${name}.agg.vcf
     """
-  
+}
+
+
+
+process annotate_vep {
+    container = 'VEP.sif'
+    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
+    cpus 6
+    
+    input:
+	file(vcf) from agg_vcf
+
+    output:
+	file("${name}.vep.vcf") into vep
+
+    """
+    vep -i ${vcf} -o ${name}.vep.vcf \\
+    --offline --merged --everything --vcf --no_stats \\
+    --fork ${task.cpus} \\
+    --force_overwrite \\
+    --plugin CADD $CADD --plugin LoFtool \\
+    --fasta $VEP_FASTA \\
+    --dir_cache $VEP_CACHE --dir_plugins $VEP_CACHE/Plugins \\
+    --distance 200 \\
+    -cache -custom $GNOMAD \\
+    """
 }

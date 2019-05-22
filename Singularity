@@ -20,4 +20,4 @@ From:nfcore/base
 %post
 	/opt/conda/bin/conda env create -f /environment.yml
 	/opt/conda/bin/conda clean -a
-	#gatk3-register /opt/sentieon-genomics-201808.01
+	/opt/conda/envs/CMD-twist/bin/gatk3-register /opt/GenomeAnalysisTK-3.8.tar.bz2
