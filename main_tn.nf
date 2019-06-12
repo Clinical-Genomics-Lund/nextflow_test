@@ -323,7 +323,7 @@ process cnvkit {
     set val(typeN), file(bamN), file(baiN) from bamN_cnvkit
 
     output:
-    set file("out/${bamT}.cnr"),file("out/${bamT}.cns")
+    set file("out/${name}.markdup.cnr"),file("out/${name}.markdup.cns")
 
     when:
     params.cnvkit
