@@ -8,7 +8,7 @@ CADD      = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
 VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
 VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
 GNOMAD    = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
-
+FLATREF   = "/trannel/proj/umis_TWIST/cnvkit/refFlat_nochr.txt"
 
 
 // Check if paired or unpaired analysis
@@ -95,14 +95,15 @@ bamN = Channel.create()
 bams.choice(bamT, bamN) {it[0] == "T" ? 0 : 1}
 
 // Send them to the different variant callers
-(bamT_freebayes, bamT_mutect, bamT_tnscope, bamT_vardict, bamT_pindel) = bamT.into(5)
+(bamT_freebayes, bamT_mutect, bamT_tnscope, bamT_vardict, bamT_pindel, bamT_cnvkit) = bamT.into(6)
 bamN_freebayes = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
 bamN_mutect    = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
 bamN_tnscope   = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
 bamN_vardict   = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
 bamN_pindel    = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
+bamN_cnvkit    = Channel.from( ["N", file("NO_FILE"), file("NO_FILE")] )
 if( mode == "paired" ) {
-    (bamN_freebayes, bamN_mutect, bamN_tnscope, bamN_vardict, bamN_pindel) = bamN.into(5)
+    (bamN_freebayes, bamN_mutect, bamN_tnscope, bamN_vardict, bamN_pindel, bamN_cnvkit) = bamN.into(6)
 }
 
 
@@ -313,4 +314,41 @@ process annotate_vep {
     --distance 200 \\
     -cache -custom $GNOMAD \\
     """
+}
+
+process cnvkit {
+    cpus 6
+    input:
+    set val(typeT), file(bamT), file(baiT) from bamT_cnvkit
+    set val(typeN), file(bamN), file(baiN) from bamN_cnvkit
+
+    output:
+    set file("out/${bamT}.cnr"),file("out/${bamT}.cns")
+
+    when:
+    params.cnvkit
+
+    script:
+    if( mode == "paired" ) {
+	"""
+    cnvkit.py target $regions_bed --annotate $FLATREF --split -o ${regions_bed}.cnvkit.bed
+    cnvkit.py batch ${bamT} \
+    --normal {input.bamN} \
+    --targets ${regions_bed}.cnvkit.bed \
+    --output-reference ${bamT}.ref.cnn \
+    --output-dir out/ \
+    --scatter --diagram
+    """
+    }
+    else if( mode == "unpaired" ) {
+	"""
+    cnvkit.py target $regions_bed --annotate $FLATREF --split -o ${regions_bed}.cnvkit.bed
+    cnvkit.py reference -o ${regions_bed}.ref.cnn -f $genome_file -t ${regions_bed}.cnvkit.bed
+    cnvkit.py batch \
+    --drop-low-coverage \
+    --reference ${regions_bed}.ref.cnn \
+    --output-dir out/ \
+    --scatter --diagram ${bamT}
+    """
+    }
 }
