@@ -323,7 +323,8 @@ process cnvkit {
     set val(typeN), file(bamN), file(baiN) from bamN_cnvkit
 
     output:
-    set file("out/${name}.markdup.cnr"),file("out/${name}.markdup.cns")
+    set file('out/*.cnr'), file('out/*.cns') into cnvs
+    file('out/*.cns') into cnv_test
 
     when:
     params.cnvkit
@@ -351,4 +352,55 @@ process cnvkit {
     --scatter --diagram ${bamT}
     """
     }
+}
+
+cnvs.into {cnvs1; cnvs2; cnvs3}
+
+process call_filter_plot_cnvkit {
+    input:
+    set file(cnr), file(cns) from cnvs1
+    output:
+    set file('cns.call') into called_cnv
+    when:
+    params.cnvkit
+    """
+    cnvkit.py call $cns --filter cn 
+    mv *call* cns.call
+    cnvkit.py export vcf cns.call \
+	-i $name \
+	-o ${name}.cnv.vcf 
+    """
+
+}
+called_cnv
+    .into{ cc1; cc2 }
+
+// works with select versions of cnvkit. For some reason single chromosome scatter plots does not work with 0.9.5 
+chromosomes = Channel.from(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, "X", "Y" )
+process test_chrom_channel {
+    input:
+    set val(chr), file(call), file(cnr), file(cns) from chromosomes.combine(cc1).combine(cnvs2)
+    output:
+    file("${chr}.png")
+    when:
+    chr != "Y"
+    script:
+    """
+    cnvkit.py scatter -s $call $cnr -c $chr -o ${chr}.png --title '$name - Chromosome $chr'
+    """
+}
+
+cnv_test
+    .splitCsv(header:true, sep: '\t')
+    .map{ row-> tuple(row.chromosome, row.start, row.end ) }
+    .set { plotcnv }
+
+process read_cns {
+    input:
+    set val(chr), val(start), val(end), file(cnr), file(cns), file(call) from plotcnv.combine(cnvs3).combine(cc2)
+    output:
+    file("${name}.${chr}_${start}_${end}.png")
+    """
+    cnvkit.py scatter -s $call $cnr -c $chr:$start-$end -o ${name}.${chr}_${start}_${end}.png
+    """
 }
