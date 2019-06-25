@@ -324,7 +324,7 @@ process cnvkit {
 
     output:
     set file('out/*.cnr'), file('out/*.cns') into cnvs
-    file('out/*.cns') into cnv_test
+    file('out/*.cns') into cns_file
 
     when:
     params.cnvkit
@@ -354,7 +354,8 @@ process cnvkit {
     }
 }
 
-cnvs.into {cnvs1; cnvs2; cnvs3}
+cnvs.into {cnvs1; cnvs2; cnvs3; cnvs4}
+
 
 process call_filter_plot_cnvkit {
     input:
@@ -372,35 +373,63 @@ process call_filter_plot_cnvkit {
     """
 
 }
-called_cnv
-    .into{ cc1; cc2 }
 
-// works with select versions of cnvkit. For some reason single chromosome scatter plots does not work with 0.9.5 
-chromosomes = Channel.from(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, "X", "Y" )
-process test_chrom_channel {
+called_cnv
+    .into{ cc1; cc2; cc3; cc4 }
+cc4.into {cnv_seg; cnv_chr}
+cnv_seg
+    .splitCsv(header:true, sep: '\t')
+    .map{ row-> tuple(row.chromosome, row.start, row.end, row.cn ) }
+    .set { plotcnv }
+cnv_chr 
+    .splitCsv(header:true, sep: '\t')
+    .map{ row-> tuple(row.chromosome) }
+    .unique()
+    .set { plotchr }
+
+
+process read_cns {
+    container = 'container_cnvkit091.sif'
+    publishDir "/data/bnf/dev/viktor/NF_output/${name}", mode: 'copy', overwrite: true
     input:
-    set val(chr), file(call), file(cnr), file(cns) from chromosomes.combine(cc1).combine(cnvs2)
+    set val(chr), val(start), val(end), val(cn), file(cnr), file(cns), file(call) from plotcnv.combine(cnvs2).combine(cc1)
     output:
-    file("${chr}.png")
+    file("${name}.${chr}_${start}_${end}.png")
     when:
-    chr != "Y"
+    "$cn" > 2 || "$cn" < 1
     script:
     """
-    cnvkit.py scatter -s $call $cnr -c $chr -o ${chr}.png --title '$name - Chromosome $chr'
+    cnvkit.py scatter -s $call $cnr -c $chr:$start-$end -o ${name}.${chr}_${start}_${end}.png --title '$name $chr:$start-$end'
     """
 }
 
-cnv_test
-    .splitCsv(header:true, sep: '\t')
-    .map{ row-> tuple(row.chromosome, row.start, row.end ) }
-    .set { plotcnv }
-
-process read_cns {
+process print_chr {
+    publishDir "/data/bnf/dev/viktor/NF_output/${name}/chromosomes", mode: 'copy', overwrite: true
     input:
-    set val(chr), val(start), val(end), file(cnr), file(cns), file(call) from plotcnv.combine(cnvs3).combine(cc2)
+    set val(chr), file(call), file(cnr), file(cns) from plotchr.combine(cc2).combine(cnvs3)
     output:
-    file("${name}.${chr}_${start}_${end}.png")
+    file("${chr}.png")
+    script:
+    
     """
-    cnvkit.py scatter -s $call $cnr -c $chr:$start-$end -o ${name}.${chr}_${start}_${end}.png
+    cnvkit.py scatter -s $call $cnr -c ${chr} -o ${chr}.png --title '$name - Chromosom ${chr}'
+    """
+}
+
+Channel
+    .fromPath(params.hotspots)
+    .splitCsv(header:false)
+    .set{ hotspot }
+
+process plot_hotspots {
+    container = 'container_cnvkit091.sif'
+    publishDir "/data/bnf/dev/viktor/NF_output/${name}/hotspots", mode: 'copy', overwrite: true
+    input:
+    set val(gene), file(call), file(cnr), file(cns) from hotspot.combine(cc3).combine(cnvs4)
+    output:
+    file("${gene}.png")
+    script:
+    """
+    cnvkit.py scatter -s $call $cnr -g $gene -o ${gene}.png --title '$name - Chromosome $gene'
     """
 }
