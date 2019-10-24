@@ -1,14 +1,9 @@
 #!/usr/bin/env nextflow
 
 genome_file = file(params.fasta)
-regions_bed = file(params.bed)
 name        = params.name
 
-CADD      = "/data/bnf/sw/.vep/PluginData/whole_genome_SNVs_1.4.tsv.gz"
-VEP_FASTA = "/data/bnf/sw/.vep/homo_sapiens/87_GRCh37/Homo_sapiens.GRCh37.75.dna.primary_assembly.fa"
-VEP_CACHE = "/data/bnf/sw/ensembl-vep-95/.vep"
-GNOMAD    = "/data/bnf/ref/b37/gnomad.exomes.r2.0.1.sites.vcf___.gz,gnomADg,vcf,exact,0,AF,AF_AFR,AF_AMR,AF_ASJ,AF_EAS,AF_FIN,AF_NFE,AF_OTH"
-
+OUTDIR = params.outdir
 
 
 // Check if paired or unpaired analysis
@@ -76,9 +71,9 @@ process bwa_align {
 
 
 process markdup {
-    publishDir '/data/bnf/proj/nextflow_test/bam', mode: 'copy', overwrite: true
-    
+    publishDir "${OUTDIR}/bam/myeloid", mode: 'copy', overwrite: true
     cpus 10
+    
     input:
 	set val(type), file(sorted_bam) from bwa_bam
 
@@ -86,8 +81,8 @@ process markdup {
 	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams
 
     """
-    #sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
-    sambamba markdup --tmpdir /data/tmp $sorted_bam ${name}.${type}.markdup.bam
+    #sambamba markdup -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
+    sambamba markdup $sorted_bam ${name}.${type}.markdup.bam
     """
 }
 
@@ -159,7 +154,6 @@ process freebayes {
     script:
     if( mode == "paired" ) {
    	"""
-        export PERL5LIB=/data/bnf/scripts/modules
         freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf.raw
         vcffilter -F LowCov -f "DP > 500" -f "QA > 1500" freebayes_${bed}.vcf.raw | vcffilter -F LowFrq -o -f "AB > 0.05" -f "AB = 0" | vcfglxgt > freebayes_${bed}.filt1.vcf
         filter_freebayes_somatic.pl freebayes_${bed}.filt1.vcf > freebayes_${bed}.vcf
@@ -269,7 +263,7 @@ vcfparts_vardict   = vcfparts_vardict.groupTuple()
 vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope, vcfparts_vardict)
 
 process concatenate_vcfs {
-    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
+    publishDir "${OUTDIR}/vcf/myeloid", mode: 'copy', overwrite: true
     
     input:
 	set vc, file(vcfs) from vcfs_to_concat
@@ -294,7 +288,6 @@ process aggregate_vcfs {
 	file("${name}.agg.vcf") into agg_vcf
 
     """
-    export PERL5LIB=/data/bnf/scripts/modules
     aggregate_vcf.pl --vcf ${vcfs.join(",")} |vcf-sort -c > ${name}.agg.vcf
     """
 }
@@ -302,8 +295,8 @@ process aggregate_vcfs {
 
 
 process annotate_vep {
-    container = '/data/bnf/dev/bjorn/nextflow_test/VEP.sif'
-    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
+    container = '/fs1/resources/containers/container_VEP.sif'
+    publishDir "${OUTDIR}/vcf/myeloid', mode: 'copy', overwrite: true
     cpus 6
     
     input:
@@ -317,10 +310,10 @@ process annotate_vep {
     --offline --merged --everything --vcf --no_stats \\
     --fork ${task.cpus} \\
     --force_overwrite \\
-    --plugin CADD $CADD --plugin LoFtool \\
-    --fasta $VEP_FASTA \\
-    --dir_cache $VEP_CACHE --dir_plugins $VEP_CACHE/Plugins \\
+    --plugin CADD $params.CADD --plugin LoFtool \\
+    --fasta $params.VEP_FASTA \\
+    --dir_cache $params.VEP_CACHE --dir_plugins $params.VEP_CACHE/Plugins \\
     --distance 200 \\
-    -cache -custom $GNOMAD \\
+    -cache -custom $params.GNOMAD \\
     """
 }

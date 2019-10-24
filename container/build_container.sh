@@ -1,1 +1,1 @@
-sudo singularity build container_`date +%Y-%m-%d`.sif Singularity
+sudo singularity build twistmyeloid_`date +%Y-%m-%d`.sif Singularity
