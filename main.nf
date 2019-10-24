@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 
-genome_file = file(params.fasta)
+genome_file = file(params.genome_file)
 name        = params.name
 
 OUTDIR = params.outdir
@@ -18,12 +18,6 @@ else {
     mode = "unpaired"
 }    
 
-
-if(params.fasta ){
-    bwaId = Channel
-            .fromPath("${params.fasta}.bwt")
-            .ifEmpty { exit 1, "BWA index not found: ${params.fasta}.bwt" }
-}	     
 
 // Split bed file in to smaller parts to be used for parallel variant calling
 Channel
@@ -296,7 +290,7 @@ process aggregate_vcfs {
 
 process annotate_vep {
     container = '/fs1/resources/containers/container_VEP.sif'
-    publishDir "${OUTDIR}/vcf/myeloid', mode: 'copy', overwrite: true
+    publishDir "${OUTDIR}/vcf/myeloid", mode: 'copy', overwrite: true
     cpus 6
     
     input:
