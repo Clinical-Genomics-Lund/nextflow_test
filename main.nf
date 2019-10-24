@@ -76,8 +76,7 @@ process markdup {
 	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams
 
     """
-    #sambamba markdup -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
-    sambamba markdup $sorted_bam ${name}.${type}.markdup.bam
+    sambamba markdup -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
     """
 }
 
