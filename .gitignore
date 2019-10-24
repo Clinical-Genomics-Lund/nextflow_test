@@ -6,3 +6,5 @@ work/
 *.png
 data/
 test_run_*
+test.timeline*
+test.dag*

@@ -34,7 +34,7 @@ if(params.fasta ){
 Channel
     .fromPath("${params.bed}")
     .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
-    .splitText( by: 500, file: 'bedpart.bed' )
+    .splitText( by: 300, file: 'bedpart.bed' )
     .into { beds_mutect; beds_freebayes; beds_tnscope; beds_vardict }
 
 // Pindel bed file
@@ -76,15 +76,18 @@ process bwa_align {
 
 
 process markdup {
+    publishDir '/data/bnf/proj/nextflow_test/bam', mode: 'copy', overwrite: true
+    
     cpus 10
     input:
 	set val(type), file(sorted_bam) from bwa_bam
 
     output:
-	set val(type), file("${type}.markdup.bam"), file("${type}.markdup.bam.bai") into bams
+	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams
 
     """
-    sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${type}.markdup.bam
+    #sambamba markdup --tmpdir /data/tmp -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
+    sambamba markdup --tmpdir /data/tmp $sorted_bam ${name}.${type}.markdup.bam
     """
 }
 
@@ -150,11 +153,16 @@ process freebayes {
 
     when:
 	params.freebayes
-    
+
+    //#cat freebayes_${bed}.filt1.vcf | awk -f /data/bnf/scripts/freebayes_somatic.awk | vcfuniq | vcffilter -A -F 'LowCov' -g "DP > 100" | awk '$10 != "." ' > freebayes_${bed}.vcf
+
     script:
     if( mode == "paired" ) {
    	"""
-        freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf
+        export PERL5LIB=/data/bnf/scripts/modules
+        freebayes -f $genome_file -t $bed --pooled-continuous --pooled-discrete --min-repeat-entropy 1 -F 0.03 $bamT $bamN > freebayes_${bed}.vcf.raw
+        vcffilter -F LowCov -f "DP > 500" -f "QA > 1500" freebayes_${bed}.vcf.raw | vcffilter -F LowFrq -o -f "AB > 0.05" -f "AB = 0" | vcfglxgt > freebayes_${bed}.filt1.vcf
+        filter_freebayes_somatic.pl freebayes_${bed}.filt1.vcf > freebayes_${bed}.vcf
         """
     }
     else if( mode == "unpaired" ) {
@@ -261,6 +269,8 @@ vcfparts_vardict   = vcfparts_vardict.groupTuple()
 vcfs_to_concat = vcfparts_freebayes.mix(vcfparts_mutect, vcfparts_tnscope, vcfparts_vardict)
 
 process concatenate_vcfs {
+    publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
+    
     input:
 	set vc, file(vcfs) from vcfs_to_concat
 
@@ -292,7 +302,7 @@ process aggregate_vcfs {
 
 
 process annotate_vep {
-    container = 'VEP.sif'
+    container = '/data/bnf/dev/bjorn/nextflow_test/VEP.sif'
     publishDir '/data/bnf/proj/nextflow_test/vcf', mode: 'copy', overwrite: true
     cpus 6
     

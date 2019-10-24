@@ -1,0 +1,20 @@
+Bootstrap:docker
+From:nfcore/base
+
+%labels
+	MAINTAINER Björn Hallström <bjorn.hallstrom@skane.se>
+	DESCRIPTION Singularity container for old sambamba version
+	VERSION 0.0.1
+
+%environment
+	PATH=/opt/conda/envs/CMD-twist/bin:$PATH
+
+
+
+%files
+        environment_oldsambamba.yml /
+
+%post
+	/opt/conda/bin/conda env create -f /environment_oldsambamba.yml
+	/opt/conda/bin/conda clean -a
+

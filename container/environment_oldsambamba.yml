@@ -1,0 +1,7 @@
+name: CMD-twist
+channels:
+    - bioconda
+    - defaults
+
+dependencies:
+    - bioconda::sambamba=0.6.6
