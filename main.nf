@@ -21,8 +21,8 @@ else {
 
 // Split bed file in to smaller parts to be used for parallel variant calling
 Channel
-    .fromPath("${params.bed}")
-    .ifEmpty { exit 1, "Regions bed file not found: ${params.bed}" }
+    .fromPath("${params.regions_bed}")
+    .ifEmpty { exit 1, "Regions bed file not found: ${params.regions_bed}" }
     .splitText( by: 300, file: 'bedpart.bed' )
     .into { beds_mutect; beds_freebayes; beds_tnscope; beds_vardict }
 
@@ -30,7 +30,7 @@ Channel
 if(params.pindel) {
   Channel
       .fromPath("${params.pindelbed}")
-      .ifEmpty { exit 1, "Pindel regions bed file not found: ${params.bed}" }
+      .ifEmpty { exit 1, "Pindel regions bed file not found: ${params.pindelbed}" }
       .set { bed_pindel }
 }
 
@@ -67,6 +67,7 @@ process bwa_align {
 process markdup {
     publishDir "${OUTDIR}/bam/myeloid", mode: 'copy', overwrite: true
     cpus 10
+    memory '64 GB'
     
     input:
 	set val(type), file(sorted_bam) from bwa_bam
