@@ -27,3 +27,4 @@ dependencies:
     - bioconda::vt=2015.11.10
     - bioconda::gatk=3.8
     - bioconda::fgbio=0.8.1
+    - bioconda::sentieon=201808.08

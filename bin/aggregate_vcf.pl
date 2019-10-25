@@ -1,12 +1,13 @@
 #!/usr/bin/perl -w
 use strict;
 use Getopt::Long;
-use CMD::vcf2;
+use File::Basename;
+use lib dirname (__FILE__);
+use vcf2;
 use strict;
 use Data::Dumper;
 
-
-    
+   
 
 my %opt = ();
 my @supported_callers = ('freebayes', 'mutect2', 'tnscope' );
@@ -33,7 +34,7 @@ sub aggregate_vcfs {
     my @headers;
     foreach my $fn ( @vcfs ) {
 
-	my $vcf = CMD::vcf2->new('file'=>$fn );
+	my $vcf = vcf2->new('file'=>$fn );
 
 	push @headers, $vcf->{meta};
 	

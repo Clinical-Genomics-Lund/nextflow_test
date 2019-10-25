@@ -1,4 +1,4 @@
-package CMD::vcf2;
+package vcf2;
 use strict;
 use Data::Dumper;
 use Exporter qw(import);

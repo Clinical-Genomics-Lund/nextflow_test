@@ -1,10 +1,12 @@
 #!/usr/bin/perl -w
 use strict;
-use CMD::vcf2;
+use File::Basename;
+use lib dirname (__FILE__);
+use vcf2;
 use Data::Dumper;
 use List::Util qw( max min );
 
-my $vcf = CMD::vcf2->new('file'=>$ARGV[0] );
+my $vcf = vcf2->new('file'=>$ARGV[0] );
 
 #TODO ADD INFO HEADER STRINGS PROPERLY!
 system("zgrep ^## $ARGV[0]");

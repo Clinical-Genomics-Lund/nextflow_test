@@ -66,14 +66,14 @@ process bwa_align {
 
 process markdup {
     publishDir "${OUTDIR}/bam/myeloid", mode: 'copy', overwrite: true
-    cpus 10
+    cpus 16
     memory '64 GB'
     
     input:
 	set val(type), file(sorted_bam) from bwa_bam
 
     output:
-	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams
+	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams, bams_qc
 
     """
     sambamba markdup -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
@@ -222,8 +222,39 @@ process sentieon_preprocess_bam {
     }
 }
 
+
+process sentieon_qc {
+    cpus 40
+    memory '64 GB'
+    publishDir "${outdir}/postmap/myeloid/", mode: 'copy', overwrite: 'true'
+
+    input:
+	set type, file(bam), file(bai) from bams_qc
+
+    """
+        sentieon driver \\
+                -r $genome_file \\
+                -t ${task.cpus} -i ${bam} \\
+                --algo MeanQualityByCycle mq_metrics.txt \\
+                --algo QualDistribution qd_metrics.txt \\
+                --algo GCBias --summary gc_summary.txt gc_metrics.txt \\
+                --algo AlignmentStat aln_metrics.txt \\
+                --algo InsertSizeMetricAlgo is_metrics.txt \\
+                --algo CoverageMetrics --cov_thresh 1 --cov_thresh 10 --cov_thresh 30 --cov_thresh 100 --cov_thresh 250 --cov_thresh 500 cov_metrics.txt
+        sentieon driver \\
+                -r $genome_file \\
+                -t ${task.cpus} -i ${bam} \\
+                --algo HsMetricAlgo --targets_list $params.regions_bed --baits_list $params.regions_bed hs_metrics.txt
+        qc_sentieon.pl ${name}_${type} panel > ${name}_${type}.QC
+        """
+
+}
+
+
+
+
 process sentieon_tnscope {
-    cpus 1
+    cpus 4
     
     input:
 	set file(bamT), file(baiT), file(recal_tableT) from processed_bamT_tnscope
@@ -237,7 +268,7 @@ process sentieon_tnscope {
     if( mode == "paired" ) {
 	"""
         sentieon driver -t ${task.cpus} -r $genome_file -i $bamT -q $recal_tableT -i $bamN -q $recal_tableN --interval $bed --algo TNscope --tumor_sample ${name}_T --normal_sample ${name}_N --clip_by_minbq 1 --max_error_per_read 3 --min_init_tumor_lod 2.0 --min_base_qual 10 --min_base_qual_asm 10 --min_tumor_allele_frac 0.00005 tnscope_${bed}.tmp.vcf
-        sentieon driver -t ${task.cpus} -r $genome_file --algo TNModelApply --model /data/bnf/ref/sentieon/Sentieon_GiAB_HighAF_LowFP_201711.05.model -v tnscope_${bed}.tmp.vcf tnscope_${bed}.tmp2.vcf
+        sentieon driver -t ${task.cpus} -r $genome_file --algo TNModelApply --model $params.tnscope_model -v tnscope_${bed}.tmp.vcf tnscope_${bed}.tmp2.vcf
         bcftools filter -s "ML_FAIL" -i "INFO/ML_PROB > 0.81" tnscope_${bed}.tmp2.vcf -m x -o tnscope_${bed}.vcf
         """
     }
@@ -291,7 +322,7 @@ process aggregate_vcfs {
 process annotate_vep {
     container = '/fs1/resources/containers/container_VEP.sif'
     publishDir "${OUTDIR}/vcf/myeloid", mode: 'copy', overwrite: true
-    cpus 6
+    cpus 16
     
     input:
 	file(vcf) from agg_vcf

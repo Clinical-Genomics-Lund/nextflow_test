@@ -14,7 +14,6 @@ From:nfcore/base
 %files
         environment.yml /
         /data/bnf/scripts/postaln_qc.pl /usr/local/bin
-	/data/bnf/sw/sentieon/sentieon-genomics-201808.05 /opt
         data/GenomeAnalysisTK-3.8.tar.bz2 /opt
 
 %post
