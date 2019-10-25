@@ -233,6 +233,7 @@ process sentieon_qc {
 
     """
         sentieon driver \\
+                --interval $params.regions_bed \\
                 -r $genome_file \\
                 -t ${task.cpus} -i ${bam} \\
                 --algo MeanQualityByCycle mq_metrics.txt \\
