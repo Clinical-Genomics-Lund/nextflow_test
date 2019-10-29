@@ -23,7 +23,7 @@ else {
 Channel
     .fromPath("${params.regions_bed}")
     .ifEmpty { exit 1, "Regions bed file not found: ${params.regions_bed}" }
-    .splitText( by: 300, file: 'bedpart.bed' )
+    .splitText( by: 150, file: 'bedpart.bed' )
     .into { beds_mutect; beds_freebayes; beds_tnscope; beds_vardict }
 
 // Pindel bed file
@@ -45,7 +45,7 @@ process bwa_align {
 	set val(type), file(r1), file(r2) from fastq
 
     output:
-	set val(type), file("${type}_bwa.sort.bam") into bwa_bam
+	set val(type), file("${type}_bwa.sort.bam"), file("${type}_bwa.sort.bam.bai") into bwa_bam
 
     script:
     if( params.sentieon_bwa ) {
@@ -70,13 +70,15 @@ process markdup {
     memory '64 GB'
     
     input:
-	set val(type), file(sorted_bam) from bwa_bam
+	set val(type), file(bam), file(bai) from bwa_bam
 
     output:
-	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams, bams_qc
+	set val(type), file("${name}.${type}.markdup.bam"), file("${name}.${type}.markdup.bam.bai") into bams
+	set val(type), file(bam), file(bai), file("dedup_metrics.txt") into bams_qc
 
     """
-    sambamba markdup -t ${task.cpus} $sorted_bam ${name}.${type}.markdup.bam
+    sentieon driver -t ${task.cpus} -i $bam --algo LocusCollector --fun score_info score.gz
+    sentieon driver -t ${task.cpus} -i $bam --algo Dedup --score_info score.gz --metrics dedup_metrics.txt ${name}.${type}.markdup.bam
     """
 }
 
@@ -229,7 +231,7 @@ process sentieon_qc {
     publishDir "${outdir}/postmap/myeloid/", mode: 'copy', overwrite: 'true'
 
     input:
-	set type, file(bam), file(bai) from bams_qc
+	set type, file(bam), file(bai), file(dedup) from bams_qc
 
     """
         sentieon driver \\
@@ -245,7 +247,7 @@ process sentieon_qc {
         sentieon driver \\
                 -r $genome_file \\
                 -t ${task.cpus} -i ${bam} \\
-                --algo HsMetricAlgo --targets_list $params.regions_bed --baits_list $params.regions_bed hs_metrics.txt
+                --algo HsMetricAlgo --targets_list $params.interval_list --baits_list $params.interval_list hs_metrics.txt
         qc_sentieon.pl ${name}_${type} panel > ${name}_${type}.QC
         """
 
