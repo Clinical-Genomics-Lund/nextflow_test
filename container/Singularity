@@ -28,6 +28,6 @@ From:nfcore/base
 
 	git clone https://github.com/Clinical-Genomics-Lund/qc_sentieon.git
 	cd qc_sentieon
-	git checkout 04f4ae7fe756555161ecf682f251b78c7d2338fc
+	git checkout 6cad094d6ba81210e227c6713aeb97269a60a66d
 	cp qc_sentieon.pl /opt/conda/bin/.
 		
